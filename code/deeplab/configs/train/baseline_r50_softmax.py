@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from albumentations import Compose, Resize, ShiftScaleRotate, GaussNoise
+from albumentations import Compose, Resize, ShiftScaleRotate, GaussNoise, Ran
 from albumentations import RandomBrightnessContrast, Normalize
 
 from ignite.contrib.handlers import PiecewiseLinear
@@ -15,7 +15,7 @@ from dataflow.datasets import get_train_dataset
 from dataflow.transforms import ToTensor, ignore_mask_boundaries, prepare_batch_fp16, prepare_batch_fp32
 
 from models.deeplabv3 import DeepLabV3
-from models.backbones import build_resnet18_backbone
+from models.backbones import build_resnet50_backbone
 
 assert 'DATASET_PATH' in os.environ
 data_path = os.environ['DATASET_PATH']
@@ -65,17 +65,17 @@ prepare_batch = prepare_batch_fp16 if use_fp16 else prepare_batch_fp32
 val_interval = 5
 
 num_classes = 21
-model = DeepLabV3(build_resnet18_backbone, num_classes=num_classes)
+model = DeepLabV3(build_resnet50_backbone, num_classes=num_classes)
 
 
 criterion = nn.CrossEntropyLoss()
 
-lr = 0.01
+lr = 0.007 * batch_size
 weight_decay = 1e-4
 
-optimizer = optim.ASGD(model.parameters(), 
-                       lr=lr / batch_size,                       
-                       weight_decay=weight_decay * batch_size)
+optimizer = optim.SGD(model.parameters(), 
+                      lr=lr / batch_size,                       
+                      weight_decay=weight_decay * batch_size)
 
 num_epochs = 50
 

@@ -1,2 +1,2 @@
 
-from models.backbones.resnet import build_resnet18_backbone, build_resnet34_backbone
+from models.backbones.resnet import build_resnet18_backbone, build_resnet34_backbone, build_resnet50_backbone

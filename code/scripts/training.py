@@ -37,8 +37,6 @@ def run(config, logger):
 
     plx_logger.log_params(**{
         "seed": config.seed,
-        "config": config.config_filepath.name,
-        "script": config.script_filepath.name,
         "fp16": config.use_fp16,
 
         "pytorch version": torch.__version__,
