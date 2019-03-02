@@ -26,6 +26,9 @@ from custom_ignite.contrib.handlers import PolyaxonLogger
 from custom_ignite.contrib.handlers.polyaxon_logger import output_handler as plx_output_handler
 
 
+from utils import predictions_gt_images_handler
+
+
 def run(config, logger):
     
     plx_logger = PolyaxonLogger()
@@ -57,12 +60,13 @@ def run(config, logger):
     criterion = config.criterion.to(device)
 
     prepare_batch = config.prepare_batch
+    non_blocking = config.non_blocking
 
     def train_update_function(engine, batch):
 
         model.train()
         optimizer.zero_grad()
-        x, y = prepare_batch(batch, device=device, non_blocking=True)
+        x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
         loss = criterion(y_pred, y)
         loss.backward()
@@ -70,7 +74,6 @@ def run(config, logger):
         return {
             'total_loss': loss.item()
         }
-
 
     trainer = Engine(train_update_function)
 
@@ -89,21 +92,36 @@ def run(config, logger):
     RunningAverage(output_transform=lambda x: x['total_loss']).attach(trainer, 'total_loss')
     ProgressBar(persist=True).attach(trainer, ['total_loss'])
 
+    def output_transform(output):
+        return output['y_pred'], output['y']
+
     num_classes = config.num_classes
     val_metrics = {
-        "mAcc": Accuracy(), 
-        "mPr": Precision(average=True),
-        "mRe": Recall(average=True),
+        "mAcc": Accuracy(output_transform=output_transform), 
+        "mPr": Precision(average=True, output_transform=output_transform),
+        "mRe": Recall(average=True, output_transform=output_transform),
         # "IoU": IoU(num_classes=num_classes, output_transform=output_gt_predicted_classes),
-        "mIoU": mIoU(num_classes=num_classes, output_transform=output_gt_predicted_classes),
+        "mIoU": mIoU(num_classes=num_classes, 
+                     output_transform=lambda o: output_gt_predicted_classes(output_transform(o))),
     }
-    evaluator = create_supervised_evaluator(model, val_metrics,
-                                            prepare_batch=prepare_batch,
-                                            device=device, non_blocking=True)
 
-    train_evaluator = create_supervised_evaluator(model, val_metrics,
-                                                  prepare_batch=prepare_batch,
-                                                  device=device, non_blocking=True)
+    def eval_update_function(engine, batch):
+        model.eval()
+        with torch.no_grad():
+            x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
+            y_pred = model(x)
+            return {
+                "x": x, 
+                "y_pred": y_pred, 
+                "y": y
+            }
+
+    train_evaluator = Engine(eval_update_function)
+    evaluator = Engine(eval_update_function)
+
+    for name, metric in val_metrics.items():
+        metric.attach(evaluator, name)
+        metric.attach(train_evaluator, name)
     
     ProgressBar(persist=True, desc="Train Evaluation").attach(train_evaluator)
     ProgressBar(persist=True, desc="Val Evaluation").attach(evaluator)
@@ -117,6 +135,7 @@ def run(config, logger):
     # Log model's graph    
     # x, _ = prepare_batch(next(iter(config.train_loader)), device=device, non_blocking=True)
     # tb_logger.log_graph(model, x)
+
     tb_logger.attach(trainer,
                      log_handler=tb_output_handler(tag="training", output_transform=lambda x: x),
                      event_name=Events.ITERATION_COMPLETED)
@@ -128,17 +147,17 @@ def run(config, logger):
     if hasattr(config, "lr_scheduler"):
         trainer.add_event_handler(Events.ITERATION_STARTED, config.lr_scheduler)
 
-
     # @trainer.on(Events.STARTED)
     # def warmup_cudnn(engine):
     #     logger.info("Warmup CuDNN on random inputs")
-    #     # for _ in range(5):
-    #     #     for size in [batch_size, len(test_loader.dataset) % batch_size]:
-    #     #         warmup_cudnn(model, criterion, size, config)
-    
+    #     for _ in range(5):
+    #         for size in [batch_size, len(test_loader.dataset) % batch_size]:
+    #             warmup_cudnn(model, criterion, size, config)
+
+    val_interval = config.val_interval
     @trainer.on(Events.EPOCH_COMPLETED)
     def run_validation(engine):
-        if engine.state.epoch % 5 == 0: 
+        if engine.state.epoch % val_interval == 0: 
             train_evaluator.run(config.train_eval_loader)
             evaluator.run(config.val_loader)
 
@@ -167,6 +186,11 @@ def run(config, logger):
                                                      metric_names=list(val_metrics.keys()),
                                                      another_engine=trainer),
                        event_name=Events.EPOCH_COMPLETED)
+
+    # Log predictions:
+    tb_logger.attach(evaluator, 
+                     log_handler=predictions_gt_images_handler(n_images=15, another_engine=trainer),
+                     event_name=Events.EPOCH_COMPLETED)
 
     # Log optimizer parameters
     tb_logger.attach(trainer,

@@ -8,14 +8,10 @@ try:
 except ImportError:
     from pathlib2 import Path
 
-import click
 
 from custom_ignite.contrib.config_runner.utils import load_module, setup_logger, set_seed
 
 
-@click.command()
-@click.argument('script_filepath', type=click.Path(exists=True, file_okay=True, dir_okay=False))
-@click.argument('config_filepath', type=click.Path(exists=True, file_okay=True, dir_okay=False))
 def run_script(script_filepath, config_filepath):
     """Method to run experiment (defined by a script file)
 
@@ -60,4 +56,6 @@ def run_script(script_filepath, config_filepath):
 
 
 if __name__ == "__main__":
-    run_script()
+    # To run profiler
+    assert len(sys.argv) == 3
+    run_script(sys.argv[1], sys.argv[2])
