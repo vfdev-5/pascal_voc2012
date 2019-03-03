@@ -41,6 +41,9 @@ def render_y(y, nrow=5):
 
 def predictions_gt_images_handler(n_images=15, n_rows=5, single_img_size=None, another_engine=None):
     
+    if single_img_size is not None:
+        single_img_size = [v * n_rows for v in single_img_size]
+
     def wrapper(engine, writer, state_attr):
         output = engine.state.output
         x, y_pred, y = output['x'], output['y_pred'], output['y']

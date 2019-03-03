@@ -94,13 +94,15 @@ def run(config, logger):
         return output['y_pred'], output['y']
 
     num_classes = config.num_classes
+
+    iou_metric = IoU(num_classes=num_classes, 
+                     output_transform=output_transform)
     val_metrics = {
         "mAcc": Accuracy(output_transform=output_transform), 
         "mPr": Precision(average=True, output_transform=output_transform),
         "mRe": Recall(average=True, output_transform=output_transform),
-        # "IoU": IoU(num_classes=num_classes, output_transform=output_gt_predicted_classes),
-        "mIoU": mIoU(num_classes=num_classes, 
-                     output_transform=lambda o: output_gt_predicted_classes(output_transform(o))),
+        "IoU": iou_metric,
+        "mIoU": iou_metric.mean(),
     }
 
     def eval_update_function(engine, batch):
@@ -126,7 +128,7 @@ def run(config, logger):
 
     log_dir = get_outputs_path()
     if log_dir is None:
-        log_dir = "debug_tb_logs"
+        log_dir = "output"
 
     tb_logger = TensorboardLogger(log_dir=log_dir)
 
@@ -143,7 +145,11 @@ def run(config, logger):
                       event_name=Events.ITERATION_COMPLETED)
 
     if hasattr(config, "lr_scheduler"):
-        trainer.add_event_handler(Events.ITERATION_STARTED, config.lr_scheduler)
+        lr_scheduler = config.lr_scheduler
+        if isinstance(lr_scheduler, torch.optim.lr_scheduler._LRScheduler):
+            trainer.add_event_handler(Events.ITERATION_STARTED, lambda engine: lr_scheduler.step())
+        else:
+            trainer.add_event_handler(Events.ITERATION_STARTED, config.lr_scheduler)
 
     # @trainer.on(Events.STARTED)
     # def warmup_cudnn(engine):
@@ -152,7 +158,7 @@ def run(config, logger):
     #         for size in [batch_size, len(test_loader.dataset) % batch_size]:
     #             warmup_cudnn(model, criterion, size, config)
 
-    val_interval = config.val_interval
+    val_interval = config.val_interval if not config.debug else 1    
     @trainer.on(Events.EPOCH_COMPLETED)
     def run_validation(engine):
         if engine.state.epoch % val_interval == 0: 
@@ -187,7 +193,9 @@ def run(config, logger):
 
     # Log predictions:
     tb_logger.attach(evaluator, 
-                     log_handler=predictions_gt_images_handler(n_images=15, another_engine=trainer),
+                     log_handler=predictions_gt_images_handler(n_images=15, 
+                                                               single_img_size=(256, 256), 
+                                                               another_engine=trainer),
                      event_name=Events.EPOCH_COMPLETED)
 
     # Log optimizer parameters
@@ -212,5 +220,14 @@ def run(config, logger):
     if hasattr(config, "es_patience"):
         es_handler = EarlyStopping(patience=config.es_patience, score_function=score_function, trainer=trainer)    
         evaluator.add_event_handler(Events.COMPLETED, es_handler)
+
+    def empty_cuda_cache(engine):
+        torch.cuda.empty_cache()
+        import gc
+        gc.collect()
+
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, empty_cuda_cache)
+    evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
+    train_evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
 
     trainer.run(config.train_loader, max_epochs=config.num_epochs)

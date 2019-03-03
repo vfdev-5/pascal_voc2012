@@ -1,12 +1,14 @@
-
 import os
+from itertools import chain
+from functools import partial
+
 import cv2
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from albumentations import Compose, Resize, ShiftScaleRotate, GaussNoise, Ran
-from albumentations import RandomBrightnessContrast, Normalize
+from albumentations import Compose, RandomCrop, ShiftScaleRotate, HorizontalFlip, PadIfNeeded, CenterCrop
+from albumentations import GaussNoise, RandomBrightnessContrast, Normalize
 
 from ignite.contrib.handlers import PiecewiseLinear
 
@@ -20,6 +22,9 @@ from models.backbones import build_resnet50_backbone
 assert 'DATASET_PATH' in os.environ
 data_path = os.environ['DATASET_PATH']
 
+debug = True
+
+
 seed = 12
 device = 'cuda'
 
@@ -27,10 +32,18 @@ use_fp16 = False
 
 
 train_transforms = Compose([
-    ShiftScaleRotate(shift_limit=0.2, scale_limit=0.075, rotate_limit=45, interpolation=cv2.INTER_CUBIC, p=0.3),
-    Resize(224, 224, interpolation=cv2.INTER_CUBIC),
-    GaussNoise(),
+    HorizontalFlip(),
+    PadIfNeeded(600, 600, border_mode=cv2.BORDER_CONSTANT),
+    ShiftScaleRotate(shift_limit=(-0.05, 0.05), 
+                     scale_limit=(-0.1, 2.0), 
+                     rotate_limit=45, 
+                     p=0.8, 
+                     border_mode=cv2.BORDER_CONSTANT),
+    RandomCrop(513, 513),
+
+    GaussNoise(p=0.5),
     RandomBrightnessContrast(),
+    
     Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ignore_mask_boundaries,
     ToTensor(),
@@ -39,15 +52,17 @@ train_transform_fn = lambda dp: train_transforms(**dp)
 
 
 val_transforms = Compose([
-    Resize(224, 224, interpolation=cv2.INTER_CUBIC),
+    PadIfNeeded(600, 600, border_mode=cv2.BORDER_CONSTANT),    
+    CenterCrop(513, 513),
+
     Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ignore_mask_boundaries,
-    ToTensor(),
+    ToTensor(),    
 ])
 val_transform_fn = lambda dp: val_transforms(**dp)
 
 
-batch_size = 64
+batch_size = 8
 
 non_blocking = True
 
@@ -57,7 +72,9 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=da
                                                                     val_transforms=val_transform_fn,
                                                                     batch_size=batch_size,
                                                                     num_workers=10,
-                                                                    val_batch_size=batch_size * 2,                                                                    
+                                                                    val_batch_size=batch_size * 2,
+                                                                    limit_train_num_samples=100 if debug else None,
+                                                                    limit_val_num_samples=100 if debug else None,
                                                                     random_seed=seed)
 
 prepare_batch = prepare_batch_fp16 if use_fp16 else prepare_batch_fp32
@@ -70,21 +87,29 @@ model = DeepLabV3(build_resnet50_backbone, num_classes=num_classes)
 
 criterion = nn.CrossEntropyLoss()
 
-lr = 0.007 * batch_size
-weight_decay = 1e-4
+lr = 0.007 / 4.0 * batch_size
+weight_decay = 5e-4
+momentum = 0.9
 
-optimizer = optim.SGD(model.parameters(), 
-                      lr=lr / batch_size,                       
-                      weight_decay=weight_decay * batch_size)
 
-num_epochs = 50
+optimizer = optim.SGD([{'params': model.backbone.parameters()}, 
+                       {'params': chain(model.aspp.parameters(), model.decoder.parameters())}],
+                      lr=lr, momentum=momentum, weight_decay=weight_decay, nesterov=True)
+
+num_epochs = 50 if not debug else 2
 
 
 l = len(train_loader)
-lr_scheduler = PiecewiseLinear(optimizer, 
-                               param_name="lr",
-                               milestones_values=[(0, 0), (5 * l, lr), (35 * l, lr), (35 * l, lr * 0.1), (num_epochs * l, 0.0)])
 
+def lambda_lr_scheduler(iteration, lr0, n, a):
+    return lr0 * pow((1.0 - 1.0 * iteration / n), a)
+
+
+lr_scheduler = optim.lr_scheduler.LambdaLR(optimizer, 
+                                           lr_lambda=[
+                                               partial(lambda_lr_scheduler, lr0=lr, n=num_epochs * l, a=0.9),
+                                               partial(lambda_lr_scheduler, lr0=lr * 10.0, n=num_epochs * l, a=0.9)
+                                           ])
 
 def score_function(evaluator):
     score = evaluator.state.metrics['mIoU']

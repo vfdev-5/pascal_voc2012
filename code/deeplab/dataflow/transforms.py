@@ -9,8 +9,14 @@ from albumentations import BasicTransform
 
 class ToTensor(BasicTransform):
     
-    def __call__(self, **kwargs):
-        for key, value in kwargs.items():
+    keys = ['image', 'mask']
+
+    def __call__(self, force_apply=False, **kwargs):
+        
+        for key in self.keys:
+            if key not in kwargs:
+                continue
+            value = kwargs[key]
             if value.ndim == 3:
                 value = value.transpose(2, 0, 1)
             kwargs[key] = torch.from_numpy(value)
@@ -28,7 +34,7 @@ class ToTensor(BasicTransform):
 
 #         return kwargs
 
-def ignore_mask_boundaries(**kwargs):
+def ignore_mask_boundaries(force_apply, **kwargs):
     assert 'mask' in kwargs, "Input should contain 'mask'"
     mask = kwargs['mask']
     mask[mask == 255] = 0

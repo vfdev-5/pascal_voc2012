@@ -70,9 +70,12 @@ def output_handler(tag, metric_names=None, output_transform=None, another_engine
         state = engine.state if another_engine is None else another_engine.state
         global_step = getattr(state, state_attr)
 
-        for k, v in metrics.items():
-            if isinstance(v, numbers.Number):
-                writer.add_scalar("{}/{}".format(tag, k), v, global_step)
+        for key, value in metrics.items():
+            if isinstance(value, numbers.Number):
+                writer.add_scalar("{}/{}".format(tag, key), value, global_step)
+            elif isinstance(value, torch.Tensor) and value.ndimension() == 1:
+                for i, v in enumerate(value):
+                    writer.add_scalar("{}/{}/{}".format(tag, key, i), v.item(), global_step)
 
     return wrapper
 
