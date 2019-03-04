@@ -36,6 +36,7 @@ def run(config, logger):
 
     plx_logger.log_params(**{
         "seed": config.seed,
+        "batch_size": config.batch_size,
 
         "pytorch version": torch.__version__,
         "ignite version": ignite.__version__,
@@ -71,8 +72,6 @@ def run(config, logger):
     @stats_collector.on(Events.STARTED)
     def init_vars(engine):
         engine.state.class_presence = torch.zeros(config.num_classes)
-
-    # trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
 
     log_dir = get_outputs_path()
     if log_dir is None:

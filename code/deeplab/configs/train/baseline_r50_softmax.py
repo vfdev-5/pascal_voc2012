@@ -22,13 +22,13 @@ from models.backbones import build_resnet50_backbone
 assert 'DATASET_PATH' in os.environ
 data_path = os.environ['DATASET_PATH']
 
-debug = True
+
+debug = False
+use_time_profiling = False
 
 
 seed = 12
 device = 'cuda'
-
-use_fp16 = False
 
 
 train_transforms = Compose([
@@ -77,7 +77,7 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=da
                                                                     limit_val_num_samples=100 if debug else None,
                                                                     random_seed=seed)
 
-prepare_batch = prepare_batch_fp16 if use_fp16 else prepare_batch_fp32
+prepare_batch = prepare_batch_fp32
 
 val_interval = 5
 

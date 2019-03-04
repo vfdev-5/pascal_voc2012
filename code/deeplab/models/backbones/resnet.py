@@ -156,6 +156,11 @@ def build_resnet50_backbone(output_stride, pretrained=True):
     return build_backbone(model, output_stride=output_stride)
 
 
+def build_resnet101_backbone(output_stride, pretrained=True):
+    model = resnet101(pretrained=pretrained)
+    return build_backbone(model, output_stride=output_stride)
+
+
 if __name__ == "__main__":
     import torch
     

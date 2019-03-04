@@ -22,24 +22,24 @@ data_path = os.environ['DATASET_PATH']
 
 
 debug = True
-
 use_time_profiling = True
+
 
 seed = 12
 device = 'cuda'
 
-use_fp16 = False
-
+padded_img_size = 600
+img_size = 513
 
 train_transforms = Compose([
     HorizontalFlip(),
-    PadIfNeeded(600, 600, border_mode=cv2.BORDER_CONSTANT),
+    PadIfNeeded(padded_img_size, padded_img_size, border_mode=cv2.BORDER_CONSTANT),
     ShiftScaleRotate(shift_limit=(-0.05, 0.05), 
                      scale_limit=(-0.1, 2.0), 
                      rotate_limit=45, 
                      p=0.8, 
                      border_mode=cv2.BORDER_CONSTANT),
-    RandomCrop(513, 513),
+    RandomCrop(img_size, img_size),
 
     GaussNoise(p=0.5),
     RandomBrightnessContrast(),
@@ -52,8 +52,8 @@ train_transform_fn = lambda dp: train_transforms(**dp)
 
 
 val_transforms = Compose([
-    PadIfNeeded(600, 600, border_mode=cv2.BORDER_CONSTANT),    
-    CenterCrop(513, 513),
+    PadIfNeeded(padded_img_size, padded_img_size, border_mode=cv2.BORDER_CONSTANT),    
+    CenterCrop(img_size, img_size),
 
     Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
     ignore_mask_boundaries,
@@ -62,8 +62,8 @@ val_transforms = Compose([
 val_transform_fn = lambda dp: val_transforms(**dp)
 
 
-batch_size = 20
-
+batch_size = 8
+num_workers = 10
 non_blocking = True
 
 
@@ -71,13 +71,13 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=da
                                                                     train_transforms=train_transform_fn,
                                                                     val_transforms=val_transform_fn,
                                                                     batch_size=batch_size,
-                                                                    num_workers=10,
+                                                                    num_workers=num_workers,
                                                                     val_batch_size=batch_size * 2,
                                                                     limit_train_num_samples=250 if debug else None,
                                                                     limit_val_num_samples=250 if debug else None,                                                             
                                                                     random_seed=seed)
 
-prepare_batch = prepare_batch_fp16 if use_fp16 else prepare_batch_fp32
+prepare_batch = prepare_batch_fp32
 
 val_interval = 5
 

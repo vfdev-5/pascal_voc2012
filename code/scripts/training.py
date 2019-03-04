@@ -37,17 +37,19 @@ def run(config, logger):
 
     set_seed(config.seed)
 
+    device = config.device
+    use_fp16 = config.use_fp16 if hasattr(config, "use_fp16") else False
+
     plx_logger.log_params(**{
         "seed": config.seed,
-        "fp16": config.use_fp16,
+        "fp16": use_fp16,
+        "batch_size": config.batch_size,
+        "model": config.model.__class__.__name__,
 
         "pytorch version": torch.__version__,
         "ignite version": ignite.__version__,
         "cuda version": torch.version.cuda
     })
-
-    device = config.device
-    use_fp16 = config.use_fp16
 
     if use_fp16:
         assert "cuda" in device

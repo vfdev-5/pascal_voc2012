@@ -10,7 +10,7 @@ except ImportError:
 
 
 from custom_ignite.contrib.config_runner.utils import load_module, setup_logger, set_seed
-
+        
 
 def run_script(script_filepath, config_filepath):
     """Method to run experiment (defined by a script file)

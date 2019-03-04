@@ -1,3 +1,5 @@
+import numbers
+
 import torch
 
 try:
@@ -54,7 +56,13 @@ def output_handler(tag, metric_names=None, output_transform=None, another_engine
         state = engine.state if another_engine is None else another_engine.state
         global_step = getattr(state, state_attr)
 
-        writer.log_metrics(step=global_step, **{"{}/{}".format(tag, k): v for k, v in metrics.items()})
+        # writer.log_metrics(step=global_step, **{"{}/{}".format(tag, k): v for k, v in metrics.items()})
+        for key, value in metrics.items():
+            if isinstance(value, numbers.Number):
+                writer.log_metrics(step=global_step, **{"{}/{}".format(tag, key): value})
+            elif isinstance(value, torch.Tensor) and value.ndimension() == 1:
+                for i, v in enumerate(value):
+                    writer.log_metrics(step=global_step, **{"{}/{}/{}".format(tag, key, i): v.item()})
 
     return output_handler_wrapper
 
