@@ -25,6 +25,8 @@ debug = True
 use_time_profiling = True
 
 
+use_time_profiling = True
+
 seed = 12
 device = 'cuda'
 

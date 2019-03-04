@@ -1,3 +1,7 @@
+# For this repo only
+plx_configs/*.yaml
+plx_configs/*/*.yaml
+
 .polyaxon
 output/
 debug_tb_logs/
