@@ -23,6 +23,8 @@ data_path = os.environ['DATASET_PATH']
 
 debug = True
 
+use_time_profiling = True
+
 seed = 12
 device = 'cuda'
 
@@ -71,8 +73,8 @@ train_loader, val_loader, train_eval_loader = get_train_val_loaders(root_path=da
                                                                     batch_size=batch_size,
                                                                     num_workers=10,
                                                                     val_batch_size=batch_size * 2,
-                                                                    limit_train_num_samples=100 if debug else None,
-                                                                    limit_val_num_samples=100 if debug else None,                                                             
+                                                                    limit_train_num_samples=250 if debug else None,
+                                                                    limit_val_num_samples=250 if debug else None,                                                             
                                                                     random_seed=seed)
 
 prepare_batch = prepare_batch_fp16 if use_fp16 else prepare_batch_fp32

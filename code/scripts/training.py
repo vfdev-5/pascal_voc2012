@@ -1,3 +1,4 @@
+from datetime import datetime
 import random
 
 import numpy as np
@@ -25,6 +26,7 @@ from custom_ignite.contrib.handlers.tensorboard_logger import output_handler as 
 from custom_ignite.contrib.handlers import PolyaxonLogger 
 from custom_ignite.contrib.handlers.polyaxon_logger import output_handler as plx_output_handler
 
+from custom_ignite.contrib.handlers.time_profiler import BasicTimeProfiler
 
 from utils import predictions_gt_images_handler
 
@@ -75,11 +77,15 @@ def run(config, logger):
 
     trainer = Engine(train_update_function)
 
+    if hasattr(config, "use_time_profiling") and config.use_time_profiling:
+        train_time_profiler = BasicTimeProfiler()
+        train_time_profiler.attach(trainer)
+
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
     # Checkpoint training
     path = get_outputs_path()
     if path is None:
-        path = "output"
+        path = "output_{}".format(datetime.now().strftime("%Y%m%D-%H%M%S"))
     checkpoint_handler = ModelCheckpoint(dirname=path, 
                                          filename_prefix="checkpoint",
                                          save_interval=500)
@@ -123,12 +129,17 @@ def run(config, logger):
         metric.attach(evaluator, name)
         metric.attach(train_evaluator, name)
     
+    if hasattr(config, "use_time_profiling") and config.use_time_profiling:
+        BasicTimeProfiler().attach(train_evaluator)
+        val_time_profiler = BasicTimeProfiler()
+        val_time_profiler.attach(evaluator)
+
     ProgressBar(persist=True, desc="Train Evaluation").attach(train_evaluator)
     ProgressBar(persist=True, desc="Val Evaluation").attach(evaluator)
 
     log_dir = get_outputs_path()
     if log_dir is None:
-        log_dir = "output"
+        log_dir = path
 
     tb_logger = TensorboardLogger(log_dir=log_dir)
 
@@ -231,3 +242,9 @@ def run(config, logger):
     train_evaluator.add_event_handler(Events.COMPLETED, empty_cuda_cache)
 
     trainer.run(config.train_loader, max_epochs=config.num_epochs)
+
+    if hasattr(config, "use_time_profiling") and config.use_time_profiling:
+        print("\n--- Training ---")
+        train_time_profiler.print_results(train_time_profiler.get_results())
+        print("\n--- Validation ---")
+        val_time_profiler.print_results(val_time_profiler.get_results())
