@@ -1,2 +1,4 @@
 from custom_ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from custom_ignite.contrib.handlers.polyaxon_logger import PolyaxonLogger
+
+from custom_ignite.contrib.handlers.time_profiler import BasicTimeProfiler
