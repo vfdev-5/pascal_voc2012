@@ -1,3 +1,0 @@
-[submodule "pytorch-deeplab-xception"]
-	path = pytorch-deeplab-xception
-	url = https://github.com/jfzhang95/pytorch-deeplab-xception.git

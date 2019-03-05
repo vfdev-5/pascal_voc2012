@@ -22,10 +22,7 @@ data_path = os.environ['DATASET_PATH']
 
 
 debug = True
-use_time_profiling = True
-
-
-use_time_profiling = True
+use_time_profiling = False
 
 seed = 12
 device = 'cuda'

@@ -171,16 +171,15 @@ class BasicTimeProfiler(object):
         ])
 
     @staticmethod
-    def odict_to_str(d):
-        out = ""
-        for k, v in d.items():
-            out += "\t{}: {}\n".format(k, v)
-        return out
-
-    @staticmethod
     def print_results(results):
-        
-        others = {k: BasicTimeProfiler.odict_to_str(v) if isinstance(v, OrderedDict) else v 
+
+        def odict_to_str(d):
+            out = ""
+            for k, v in d.items():
+                out += "\t{}: {}\n".format(k, v)
+            return out
+
+        others = {k: odict_to_str(v) if isinstance(v, OrderedDict) else v 
                   for k, v in results['event_handlers_stats'].items()}
         
         others.update(results['event_handlers_names'])
@@ -230,10 +229,11 @@ Handlers names:
 Handlers names:
 {Events_COMPLETED_names}
 
-""".format(processing_stats=BasicTimeProfiler.odict_to_str(results['processing_stats']), 
-           dataflow_stats=BasicTimeProfiler.odict_to_str(results['dataflow_stats']), 
+""".format(processing_stats=odict_to_str(results['processing_stats']), 
+           dataflow_stats=odict_to_str(results['dataflow_stats']), 
            **others)
         print(output_message)
+        return output_message
     
     @staticmethod
     def write_results(output_path):

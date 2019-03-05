@@ -14,15 +14,14 @@ polyaxon init pascal-voc2012
 
 ## Content
 
-### [Pytorch-deeplab-xception](https://github.com/jfzhang95/pytorch-deeplab-xception.git)
 
-- Initialize submodule:
+## How to run without cluster/Polyaxon
+
+
 ```bash
-git submodule update --init --recursive
+export DATASET_PATH=/path/to/dataset/ 
+export OUTPUT_PATH=/path/to/output
+export POLYAXON_NO_OP=1 
+export PYTHONPATH=$PYTHONPATH:$PWD/code/:$PWD/code/deeplab
+python3 -m custom_ignite.contrib.config_runner code/scripts/training.py code/deeplab/configs/train/baseline_r18_softmax.py
 ```
-
-- Run the training 
-```bash
-polyaxon run -u -f plx_configs/pytorch-deeplab-xception/xp_train_voc.yaml --name="pytorch-deeplab-xception-train-voc" --tags=pytorch-deeplab-xception
-```
-

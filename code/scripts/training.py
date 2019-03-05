@@ -1,4 +1,3 @@
-from datetime import datetime
 import random
 
 import numpy as np
@@ -15,8 +14,7 @@ from polyaxon_client.tracking import get_outputs_path
 
 from custom_ignite.contrib.config_runner.utils import set_seed
 
-from custom_ignite.metrics import IoU, mIoU
-from custom_ignite.metrics.confusion_matrix import output_gt_predicted_classes
+from custom_ignite.metrics import ConfusionMatrix, IoU, mIoU, Accuracy, Precision, Recall
 
 from custom_ignite.contrib.handlers import TensorboardLogger
 from custom_ignite.contrib.handlers.tensorboard_logger import output_handler as tb_output_handler, \
@@ -34,6 +32,15 @@ from utils import predictions_gt_images_handler
 def run(config, logger):
     
     plx_logger = PolyaxonLogger()
+
+    path = get_outputs_path()
+    if path is None:
+        # Setup local output
+        import os
+        from datetime import datetime
+        assert 'OUTPUT_PATH' in os.environ, "When running locally, 'OUTPUT_PATH' envvar should be defined"
+        path = os.path.join(os.environ['OUTPUT_PATH'], 
+            "{}-{}".format(datetime.now().strftime("%Y%m%d-%H%M%S"), config.config_filepath.stem))
 
     set_seed(config.seed)
 
@@ -85,9 +92,6 @@ def run(config, logger):
 
     trainer.add_event_handler(Events.ITERATION_COMPLETED, TerminateOnNan())
     # Checkpoint training
-    path = get_outputs_path()
-    if path is None:
-        path = "output_{}".format(datetime.now().strftime("%Y%m%D-%H%M%S"))
     checkpoint_handler = ModelCheckpoint(dirname=path, 
                                          filename_prefix="checkpoint",
                                          save_interval=500)
@@ -103,14 +107,14 @@ def run(config, logger):
 
     num_classes = config.num_classes
 
-    iou_metric = IoU(num_classes=num_classes, 
-                     output_transform=output_transform)
+    cm_metric = ConfusionMatrix(num_classes=num_classes, output_transform=output_transform)
+
     val_metrics = {
-        "mAcc": Accuracy(output_transform=output_transform), 
-        "mPr": Precision(average=True, output_transform=output_transform),
-        "mRe": Recall(average=True, output_transform=output_transform),
-        "IoU": iou_metric,
-        "mIoU": iou_metric.mean(),
+        "mAcc": Accuracy(cm_metric),
+        "mPr": Precision(cm_metric),
+        "mRe": Recall(cm_metric),
+        "IoU": IoU(cm_metric),
+        "mIoU": mIoU(cm_metric),
     }
 
     def eval_update_function(engine, batch):
@@ -132,7 +136,8 @@ def run(config, logger):
         metric.attach(train_evaluator, name)
     
     if hasattr(config, "use_time_profiling") and config.use_time_profiling:
-        BasicTimeProfiler().attach(train_evaluator)
+        train_eval_time_profiler = BasicTimeProfiler()
+        train_eval_time_profiler.attach(train_evaluator)
         val_time_profiler = BasicTimeProfiler()
         val_time_profiler.attach(evaluator)
 
@@ -247,6 +252,16 @@ def run(config, logger):
 
     if hasattr(config, "use_time_profiling") and config.use_time_profiling:
         print("\n--- Training ---")
-        train_time_profiler.print_results(train_time_profiler.get_results())
+        msg = train_time_profiler.print_results(train_time_profiler.get_results())
+        with open(os.path.join(path, "train_time_profiling.log"), 'w') as h:
+            h.write(msg)
+
+        print("\n--- Train evaluation ---")
+        msg = train_eval_time_profiler.print_results(train_eval_time_profiler.get_results())
+        with open(os.path.join(path, "train_eval_time_profiling.log"), 'w') as h:
+            h.write(msg)
+
         print("\n--- Validation ---")
-        val_time_profiler.print_results(val_time_profiler.get_results())
+        msg = val_time_profiler.print_results(val_time_profiler.get_results())
+        with open(os.path.join(path, "val_time_profiling.log"), 'w') as h:
+            h.write(msg)
